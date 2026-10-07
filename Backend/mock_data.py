@@ -1,3 +1,8 @@
+import os
+import json
+import urllib.request
+import urllib.error
+
 _mock_students = [
     {
         "id": "S1047", "name": "Rahul Sharma", "program": "B.Tech CSE", 
@@ -53,16 +58,60 @@ _mock_students = [
     }
 ]
 
+def get_kv_students():
+    kv_url = os.getenv("KV_REST_API_URL") or os.getenv("UPSTASH_REDIS_REST_URL")
+    kv_token = os.getenv("KV_REST_API_TOKEN") or os.getenv("UPSTASH_REDIS_REST_TOKEN")
+    
+    if not kv_url or not kv_token:
+        print("WARNING: Redis/KV missing. Falling back to in-memory data.")
+        return list(_mock_students)
+    
+    try:
+        req = urllib.request.Request(f"{kv_url}/get/students")
+        req.add_header("Authorization", f"Bearer {kv_token}")
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            if data and data.get("result"):
+                return json.loads(data["result"])
+    except Exception as e:
+        print("KV Get Error:", e)
+    
+    # If not found or error, initialize KV with our default mock students
+    set_kv_students(_mock_students)
+    return list(_mock_students)
+
+def set_kv_students(students):
+    kv_url = os.getenv("KV_REST_API_URL") or os.getenv("UPSTASH_REDIS_REST_URL")
+    kv_token = os.getenv("KV_REST_API_TOKEN") or os.getenv("UPSTASH_REDIS_REST_TOKEN")
+    
+    if not kv_url or not kv_token:
+        # Fallback updates the in-memory array
+        global _mock_students
+        _mock_students = list(students)
+        return
+    
+    try:
+        req = urllib.request.Request(f"{kv_url}/set/students", method="POST")
+        req.add_header("Authorization", f"Bearer {kv_token}")
+        req.add_header("Content-Type", "application/json")
+        payload = json.dumps(json.dumps(students)).encode('utf-8')
+        urllib.request.urlopen(req, data=payload)
+    except Exception as e:
+        print("KV Set Error:", e)
+
 def get_mock_students():
-    return _mock_students
+    return get_kv_students()
 
 def add_mock_student(student_data):
-    _mock_students.append(student_data)
+    students = get_kv_students()
+    students.append(student_data)
+    set_kv_students(students)
     return student_data
 
 def delete_mock_student(student_id):
-    global _mock_students
-    _mock_students = [s for s in _mock_students if s["id"] != student_id]
+    students = get_kv_students()
+    students = [s for s in students if s["id"] != student_id]
+    set_kv_students(students)
     return True
 
 def get_mock_interventions():
