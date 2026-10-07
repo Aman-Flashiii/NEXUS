@@ -72,7 +72,14 @@ def get_kv_students():
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
             if data and data.get("result"):
-                return json.loads(data["result"])
+                result = data["result"]
+                if isinstance(result, str):
+                    parsed = json.loads(result)
+                    # Handle previously double-encoded data
+                    if isinstance(parsed, str):
+                        parsed = json.loads(parsed)
+                    return parsed
+                return result
     except Exception as e:
         print("KV Get Error:", e)
     
@@ -94,7 +101,7 @@ def set_kv_students(students):
         req = urllib.request.Request(f"{kv_url}/set/students", method="POST")
         req.add_header("Authorization", f"Bearer {kv_token}")
         req.add_header("Content-Type", "application/json")
-        payload = json.dumps(json.dumps(students)).encode('utf-8')
+        payload = json.dumps(students).encode('utf-8')
         urllib.request.urlopen(req, data=payload)
     except Exception as e:
         print("KV Set Error:", e)
